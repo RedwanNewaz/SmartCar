@@ -22,8 +22,11 @@ Mazda 3's OBD2 pinout
 #include <Arduino.h>
 #include <esp32_can.h>
 #include "state_machine.h"
+#include "mqtt_client.h"
 
-// #define RANDOM_CAN 1
+#define RANDOM_CAN 1
+
+extern MqttClient *mqtt; 
 
 class CanSnifferBase{
 
@@ -92,26 +95,51 @@ protected:
 
 
     //------------------------------------------------------------------------------
-    // Printing a packet to serial
-    void printHex(long num) {
-        if ( num < 0x10 ){ Serial.print("0"); }
-        Serial.print(num, HEX);
-    }
+    // // Printing a packet to serial
+    // void printHex(long num) {
+    //     if ( num < 0x10 ){ Serial.print("0"); }
+    //     Serial.print(num, HEX);
+    // }
+
+    // void printPacket(packet_t * packet) {
+    //     // packet format (hex string): [ID],[RTR],[IDE],[DATABYTES 0..8B]\n
+    //     // example: 014A,00,00,1A002B003C004D\n
+    //     printHex(packet->id);
+    //     Serial.print(SEPARATOR);
+    //     printHex(packet->rtr);
+    //     Serial.print(SEPARATOR);
+    //     printHex(packet->ide);
+    //     Serial.print(SEPARATOR);
+    //     // DLC is determinded by number of data bytes, format: [00]
+    //     for (int i = 0; i < packet->dlc; i++) {
+    //         printHex(packet->dataArray[i]);
+    //     }
+    //     Serial.print(TERMINATOR);
+    // }
 
     void printPacket(packet_t * packet) {
         // packet format (hex string): [ID],[RTR],[IDE],[DATABYTES 0..8B]\n
         // example: 014A,00,00,1A002B003C004D\n
-        printHex(packet->id);
-        Serial.print(SEPARATOR);
-        printHex(packet->rtr);
-        Serial.print(SEPARATOR);
-        printHex(packet->ide);
-        Serial.print(SEPARATOR);
+        auto printHex = [](long num){
+            String result = ( num < 0x10 )?"0":"";
+            result +=  String(num, HEX);
+            return result;
+        };
+        String msg = printHex(packet->id);
+        msg += SEPARATOR; 
+        msg += printHex(packet->rtr);
+        msg += SEPARATOR; 
+        msg += printHex(packet->ide);
+        msg += SEPARATOR; 
         // DLC is determinded by number of data bytes, format: [00]
         for (int i = 0; i < packet->dlc; i++) {
-            printHex(packet->dataArray[i]);
+            msg += printHex(packet->dataArray[i]);
         }
-        Serial.print(TERMINATOR);
+        msg += TERMINATOR;
+        
+        // bin_sem = xSemaphoreCreateBinary();
+        // xSemaphoreTake(bin_sem, portMAX_DELAY);
+        mqtt->publishSerialData(msg.c_str());
     }
 
     //------------------------------------------------------------------------------
@@ -180,8 +208,9 @@ public:
      */
     CanSniffer()
     {
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
         // Serial.println("Doing Auto Baud scan on CAN0");
-        CAN0.beginAutoSpeed();
+        initialize_ = CAN0.beginAutoSpeed() == 0 ? false: true;
       
         //By default there are 7 mailboxes for each device that are RX boxes
         //This sets each mailbox to have an open filter that will accept extended
@@ -250,7 +279,7 @@ public:
     void run()
     {
         
-        while(true)
+        while(initialize_)
         {   
             CAN_FRAME incoming;
             bool canMsgFound = false; 
@@ -269,6 +298,34 @@ public:
         } 
     }
 
+    void update()
+    {
+
+        // simulation 
+        #if RANDOM_CAN == 1
+            CANsimulate();
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+        #else 
+            if(initialize_)
+            {   
+                CAN_FRAME incoming;
+                bool canMsgFound = false; 
+                if (CAN0.available() > 0) {
+                    canMsgFound = true; 
+                    CAN0.read(incoming); 
+                    onCANReceive(incoming);
+                }
+            }
+            else
+            {
+                printf("CAN0 did not initialize reboot \n");
+                vTaskDelay(1000);
+            }
+        #endif
+
+
+    }
+
     /**
      * @brief update shared msg status 
      * 
@@ -279,6 +336,8 @@ public:
         // don't update any thing when vechicle control is running 
         if(shared_msg->cntrl == controller_state::RUNNING) return; 
     }
+private:
+    bool initialize_;
 
 };
 

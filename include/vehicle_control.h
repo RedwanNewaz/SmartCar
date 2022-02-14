@@ -4,6 +4,7 @@
 #include <BLEScan.h>
 #include "BrainTree.h"
 #include "state_machine.h"
+#include "mqtt_client.h"
 
 
 
@@ -14,10 +15,12 @@
 
 
 const int BLED_PIN = 2;
-const int RELAY_PIN = 3; 
-const int BUTTON_PIN = 7; 
+const int RELAY_PIN = GPIO_NUM_32; 
+const int BUTTON_PIN = GPIO_NUM_33; 
 
 BLEScan* pBLEScan;
+
+MqttClient *mqtt; 
 
 // BLED -> Bluetooth Low Energy Device 
 volatile long BLED_detect_time = 0;
@@ -67,16 +70,28 @@ class BLEScanner:public BrainTree::Node, public BLEAdvertisedDeviceCallbacks
 class CanModeControl: public BrainTree::Node
 {
     Status update() override
-    {        
+    {    
+
         //toggle status based on button press 
         if(digitalRead(BUTTON_PIN) == HIGH)
         {
+            String msg; 
             if (shared_msg->can == can_mode::HS)
-                shared_msg->can = can_mode::MS;
+            {
+              shared_msg->can = can_mode::MS;
+              msg = "switch to can_mode::MS\n";
+            }
             else
-                shared_msg->can = can_mode::HS;
+            {
+              shared_msg->can = can_mode::HS;
+              msg = "switch to can_mode::HS\n";
+            }
+            
+            // bin_sem = xSemaphoreCreateBinary();
+            // xSemaphoreTake(bin_sem, portMAX_DELAY);
+            mqtt->publishSerialData(msg.c_str());
             // wait 250 ms to avoid debounce noise
-            delay(250);
+            vTaskDelay(250 / portTICK_PERIOD_MS);
         }
         digitalWrite(RELAY_PIN, shared_msg->can == can_mode::HS ? LOW:HIGH);
         return Node::Status::Success; 
@@ -102,18 +117,20 @@ inline void onVehicleControl( void * pvParameters )
   pinMode(BLED_PIN, OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT);
+
+  mqtt = new MqttClient;
   
-  BLEDevice::init("");
-  pBLEScan = BLEDevice::getScan(); //create new scan
-  pBLEScan->setAdvertisedDeviceCallbacks(new BLEScanner());
-  pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
-  pBLEScan->setInterval(100);
-  pBLEScan->setWindow(99);  // less or equal setInterval value
+  // BLEDevice::init("");
+  // pBLEScan = BLEDevice::getScan(); //create new scan
+  // pBLEScan->setAdvertisedDeviceCallbacks(new BLEScanner());
+  // pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
+  // pBLEScan->setInterval(100);
+  // pBLEScan->setWindow(99);  // less or equal setInterval value
 
 
   auto tree = BrainTree::Builder()
       .composite<BrainTree::Sequence>()
-          .leaf<BLEScanner>()
+          // .leaf<BLEScanner>()
           .leaf<CanModeControl>()
           .leaf<AccessControl>()
       .end()
@@ -122,6 +139,7 @@ inline void onVehicleControl( void * pvParameters )
   while(true)
   {
     tree->update();
-    delay(100);
+    mqtt->run();
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
