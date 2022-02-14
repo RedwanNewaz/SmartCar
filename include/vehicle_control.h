@@ -1,5 +1,4 @@
 #pragma once 
-#include "my_helper.h"
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>

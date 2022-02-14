@@ -20,13 +20,10 @@ Mazda 3's OBD2 pinout
 */
 
 #include <Arduino.h>
-#include <ESP32CAN.h>
-#include <CAN_config.h>
+#include <esp32_can.h>
 #include "state_machine.h"
 
 // #define RANDOM_CAN 1
-#define CAN_SPEED (500E3) //LOW=33E3, MID=95E3, HIGH=500E3 (for Vectra)
-CAN_device_t CAN_cfg;
 
 class CanSnifferBase{
 
@@ -40,17 +37,6 @@ public:
         byte dataArray[20];
     } packet_t;
     
-
-
-    CanSnifferBase()
-    {
-        CAN_cfg.speed = CAN_SPEED_500KBPS;
-        CAN_cfg.tx_pin_id = GPIO_NUM_5;
-        CAN_cfg.rx_pin_id = GPIO_NUM_4;
-        CAN_cfg.rx_queue = xQueueCreate(QUEUE_SZ, sizeof(CAN_frame_t));
-        //start CAN Module
-        ESP32Can.CANInit();
-    }
     //------------------------------------------------------------------------------
     // CAN packet simulator
     void CANsimulate(void) {
@@ -192,19 +178,50 @@ public:
      * RTR packets contain no data, the DLC field of the packet represents the requested length.
      * @param rx_frame 
      */
-    void onCANReceive(const CAN_frame_t &rx_frame) {
+    CanSniffer()
+    {
+        // Serial.println("Doing Auto Baud scan on CAN0");
+        CAN0.beginAutoSpeed();
+      
+        //By default there are 7 mailboxes for each device that are RX boxes
+        //This sets each mailbox to have an open filter that will accept extended
+        //or standard frames
+        int filter;
+        //extended
+        for (filter = 0; filter < 3; filter++) {
+            CAN0.setRXFilter(filter, 0, 0, true);
+            
+        }  
+        //standard
+        for (int filter = 3; filter < 7; filter++) {
+            CAN0.setRXFilter(filter, 0, 0, false);
+           
+        }  
+    }
+    //------------------------------------------------------------------------------
+    // CAN RX, TX
+    /**
+     * @brief https://github.com/sandeepmistry/arduino-CAN/blob/master/API.md
+     * id - 11-bit id (standard packet) or 29-bit packet id (extended packet)
+     * dlc - (optional) value of Data Length Code (DLC) field of packet, default is size of data written in packet
+     * rtr - (optional) value of Remote Transmission Request (RTR) field of packet (false or true), defaults to false. 
+     * RTR packets contain no data, the DLC field of the packet represents the requested length.
+     * @param rx_frame 
+     */
+    void onCANReceive(const CAN_FRAME &rx_frame) {
         // received a CAN packet
 
         packet_t rxPacket;
-        rxPacket.id = rx_frame.MsgID;
-        rxPacket.rtr = rx_frame.FIR.B.RTR; // Remote Transmission Request (RTR) field of packet (false or true), defaults to false. 
-        rxPacket.ide = (rx_frame.FIR.B.FF == CAN_frame_std) ? 0 : 1; // check if this is a standard or extended CAN frame
-        rxPacket.dlc = rx_frame.FIR.B.DLC;
+        rxPacket.id = rx_frame.id;
+        rxPacket.rtr = rx_frame.rtr; // Remote Transmission Request (RTR) field of packet (false or true), defaults to false. 
+        rxPacket.ide = rx_frame.extended; // check if this is a standard or extended CAN frame
+        rxPacket.dlc = rx_frame.length;
+        
      
        
         
-        for(int i = 0; i < PACKET_LEN; ++i) {
-            rxPacket.dataArray[i] = (byte) rx_frame.data.u8[i];         
+        for(int i = 0; i < rx_frame.length; ++i) {
+            rxPacket.dataArray[i] = (byte) rx_frame.data.bytes[i];         
         }
         printPacket(&rxPacket);
     }
@@ -212,17 +229,17 @@ public:
     void sendPacketToCan(packet_t * packet) {
         // transmit a CAN packet
 
-        CAN_frame_t tx_frame;
-        tx_frame.MsgID = packet->id; 
-        tx_frame.FIR.B.FF = (packet->ide == 0) ? CAN_frame_std : CAN_frame_ext;
-        tx_frame.FIR.B.DLC = packet->dlc;
-        tx_frame.FIR.B.RTR = (CAN_RTR_t) packet->rtr;
+        CAN_FRAME tx_frame;
+        tx_frame.id = packet->id; 
+        tx_frame.extended = packet->ide;
+        tx_frame.length = packet->dlc;
+        tx_frame.rtr = packet->rtr;
 
 
         for(int i = 0; i < PACKET_LEN; ++i) {
-            tx_frame.data.u8[i] = (uint8_t) packet->dataArray[i];         
+            tx_frame.data.bytes[i] = (uint8_t) packet->dataArray[i];         
         }
-        ESP32Can.CANWriteFrame(&tx_frame);
+        // CAN0.write(tx_frame);
     }
 
     /**
@@ -235,15 +252,14 @@ public:
         
         while(true)
         {   
-            CAN_frame_t rx_frame;
-            if(xQueueReceive(CAN_cfg.rx_queue, &rx_frame, 3 * portTICK_PERIOD_MS) == pdTRUE)
-            {
-                onCANReceive(rx_frame);
+            CAN_FRAME incoming;
+            bool canMsgFound = false; 
+            if (CAN0.available() > 0) {
+                canMsgFound = true; 
+                CAN0.read(incoming); 
+                onCANReceive(incoming);
             }
-
-            // establish gui communication 
-            RXcallback();
-            delay(1);
+            
 
             // simulation 
             #if RANDOM_CAN == 1
