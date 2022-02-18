@@ -22,11 +22,11 @@ Mazda 3's OBD2 pinout
 #include <Arduino.h>
 #include <esp32_can.h>
 #include "state_machine.h"
-#include "mqtt_client.h"
+// #include "mqtt_client.h"
 
-#define RANDOM_CAN 1
+// #define RANDOM_CAN 1
 
-extern MqttClient *mqtt; 
+// extern MqttClient *mqtt; 
 
 class CanSnifferBase{
 
@@ -95,52 +95,52 @@ protected:
 
 
     //------------------------------------------------------------------------------
-    // // Printing a packet to serial
-    // void printHex(long num) {
-    //     if ( num < 0x10 ){ Serial.print("0"); }
-    //     Serial.print(num, HEX);
-    // }
-
-    // void printPacket(packet_t * packet) {
-    //     // packet format (hex string): [ID],[RTR],[IDE],[DATABYTES 0..8B]\n
-    //     // example: 014A,00,00,1A002B003C004D\n
-    //     printHex(packet->id);
-    //     Serial.print(SEPARATOR);
-    //     printHex(packet->rtr);
-    //     Serial.print(SEPARATOR);
-    //     printHex(packet->ide);
-    //     Serial.print(SEPARATOR);
-    //     // DLC is determinded by number of data bytes, format: [00]
-    //     for (int i = 0; i < packet->dlc; i++) {
-    //         printHex(packet->dataArray[i]);
-    //     }
-    //     Serial.print(TERMINATOR);
-    // }
+    // Printing a packet to serial
+    void printHex(long num) {
+        if ( num < 0x10 ){ Serial.print("0"); }
+        Serial.print(num, HEX);
+    }
 
     void printPacket(packet_t * packet) {
         // packet format (hex string): [ID],[RTR],[IDE],[DATABYTES 0..8B]\n
         // example: 014A,00,00,1A002B003C004D\n
-        auto printHex = [](long num){
-            String result = ( num < 0x10 )?"0":"";
-            result +=  String(num, HEX);
-            return result;
-        };
-        String msg = printHex(packet->id);
-        msg += SEPARATOR; 
-        msg += printHex(packet->rtr);
-        msg += SEPARATOR; 
-        msg += printHex(packet->ide);
-        msg += SEPARATOR; 
+        printHex(packet->id);
+        Serial.print(SEPARATOR);
+        printHex(packet->rtr);
+        Serial.print(SEPARATOR);
+        printHex(packet->ide);
+        Serial.print(SEPARATOR);
         // DLC is determinded by number of data bytes, format: [00]
         for (int i = 0; i < packet->dlc; i++) {
-            msg += printHex(packet->dataArray[i]);
+            printHex(packet->dataArray[i]);
         }
-        msg += TERMINATOR;
-        
-        // bin_sem = xSemaphoreCreateBinary();
-        // xSemaphoreTake(bin_sem, portMAX_DELAY);
-        mqtt->publishSerialData(msg.c_str());
+        Serial.print(TERMINATOR);
     }
+
+    // void printPacket(packet_t * packet) {
+    //     // packet format (hex string): [ID],[RTR],[IDE],[DATABYTES 0..8B]\n
+    //     // example: 014A,00,00,1A002B003C004D\n
+    //     auto printHex = [](long num){
+    //         String result = ( num < 0x10 )?"0":"";
+    //         result +=  String(num, HEX);
+    //         return result;
+    //     };
+    //     String msg = printHex(packet->id);
+    //     msg += SEPARATOR; 
+    //     msg += printHex(packet->rtr);
+    //     msg += SEPARATOR; 
+    //     msg += printHex(packet->ide);
+    //     msg += SEPARATOR; 
+    //     // DLC is determinded by number of data bytes, format: [00]
+    //     for (int i = 0; i < packet->dlc; i++) {
+    //         msg += printHex(packet->dataArray[i]);
+    //     }
+    //     msg += TERMINATOR;
+        
+    //     // bin_sem = xSemaphoreCreateBinary();
+    //     // xSemaphoreTake(bin_sem, portMAX_DELAY);
+    //     // mqtt->publishSerialData(msg.c_str());
+    // }
 
     //------------------------------------------------------------------------------
     // Serial parser

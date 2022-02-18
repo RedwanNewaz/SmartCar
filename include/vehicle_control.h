@@ -4,7 +4,7 @@
 #include <BLEScan.h>
 #include "BrainTree.h"
 #include "state_machine.h"
-#include "mqtt_client.h"
+// #include "mqtt_client.h"
 
 
 
@@ -20,7 +20,7 @@ const int BUTTON_PIN = GPIO_NUM_33;
 
 BLEScan* pBLEScan;
 
-MqttClient *mqtt; 
+// MqttClient *mqtt; 
 
 // BLED -> Bluetooth Low Energy Device 
 volatile long BLED_detect_time = 0;
@@ -89,7 +89,7 @@ class CanModeControl: public BrainTree::Node
             
             // bin_sem = xSemaphoreCreateBinary();
             // xSemaphoreTake(bin_sem, portMAX_DELAY);
-            mqtt->publishSerialData(msg.c_str());
+            // mqtt->publishSerialData(msg.c_str());
             // wait 250 ms to avoid debounce noise
             vTaskDelay(250 / portTICK_PERIOD_MS);
         }
@@ -118,7 +118,7 @@ inline void onVehicleControl( void * pvParameters )
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT);
 
-  mqtt = new MqttClient;
+  // mqtt = new MqttClient;
   
   // BLEDevice::init("");
   // pBLEScan = BLEDevice::getScan(); //create new scan
@@ -139,7 +139,7 @@ inline void onVehicleControl( void * pvParameters )
   while(true)
   {
     tree->update();
-    mqtt->run();
+    // mqtt->run();
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }

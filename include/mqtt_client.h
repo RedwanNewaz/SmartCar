@@ -62,7 +62,7 @@ protected:
         // // Serial.println(SSID);
         WiFi.begin(SSID, PASSWORD);
         while (WiFi.status() != WL_CONNECTED) {
-            vTaskDelay(500);
+            vTaskDelay(500 / portTICK_PERIOD_MS);
             // // Serial.print(".");
         }
         randomSeed(micros());
@@ -94,7 +94,7 @@ protected:
             // Serial.print(m_pubSubClient_->state());
             // Serial.println(" try again in 5 seconds");
             // Wait 5 seconds before retrying
-            vTaskDelay(5000);
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
             }
         }
     }
